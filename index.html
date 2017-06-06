@@ -62,7 +62,7 @@ var ADDRESS = window.location.hash.replace(/\#/,"");
 			<tr><th>Address</th><th>Volume</th><th>Price</th></tr>
 			<tr v-for="offer in bids">
 				<template v-if="offer.isMine">
-				<td class="highlight" v-bind:style="'color:' + stringToColour(offer.Account) v-on:click="set_address(offer.Account)" >{{offer.Account}}</td>
+				<td class="highlight" v-bind:style="'color:' + stringToColour(offer.Account)" v-on:click="set_address(offer.Account)" >{{offer.Account}}</td>
 				<td class="highlight">{{ num(offer.TakerPays.value, 0) }}</td>
 				<td class="highlight">{{ num(offer.TakerGets/offer.TakerPays.value/1000000, 3) }}</td>
 				</template>
