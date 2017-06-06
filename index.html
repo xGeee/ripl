@@ -1,0 +1,263 @@
+<html>
+<head>
+<link rel="stylesheet" href="lib/css.css">
+<style>
+[v-cloak] {
+  display: none;
+}
+body {
+	background:#111;
+}
+body,h1,h3,h4,p,tr,td {	
+	color: #DDD;
+	margin:0px;
+}
+table, tr, td {
+	border: 1px solid black;
+}
+td {
+	min-width:80px;
+	max-width:150px;
+	overflow: hidden;
+	text-align: right;
+}
+th {
+	background:#222;
+	color: #444;
+}
+input {
+	width:400px;
+	text-align:center;
+	color: #DDD;
+	background:#222;
+	border-radius: 5px;
+	border: 1px solid black;
+	padding: 5px;
+}
+.highlight {
+	background:#333;
+}
+</style>
+<script src="lib/ripple-1.2.3-min.js"></script>
+<script src="https://unpkg.com/vue@2.1.10/dist/vue.js" integrity="sha384-EM4rkSrR2j2ZpSvTwYm4oqXcfANxUbR3whO+XcSdJ7t0N7+AdqKJ9jgZZwDbPT5R" crossorigin="anonymous"></script>
+</head>
+<body>
+<script>
+var ADDRESS = window.location.hash.replace(/\#/,"");
+</script>
+<div id="ripl" class="container" v-cloak>
+	<center>
+		<h4 v-on:click="getBalance()">{{ $data.state }}</h4>
+		<input type="text" v-model="address"/>
+		<br/>
+		<p>USD {{ num(balance.usd, 2) }} | XRP {{ num(balance.xrp/1000000, 2) }} ({{ num(balance.xrp/1000000/(asks[0].TakerPays/asks[0].TakerGets.value/1000000), 0)}})</p>
+		<p>
+		{{ num(sum(balance.usd, balance.xrp/1000000/(asks[0].TakerPays/asks[0].TakerGets.value/1000000)),0) }} $
+		</p>
+	</center>
+	<div class="row" v-bind:style="'display: ' + $data.offers_ready" v-cloak>
+		<div class="col-6">
+			<center><h3>Bids</h3></center>
+			<table style="border-collapse: collapse">
+			<tr><th>Address</th><th>Volume</th><th>Price</th></tr>
+			<tr v-for="offer in bids">
+				<template v-if="offer.isMine">
+				<td class="highlight" v-bind:style="'color:' + stringToColour(offer.Account)" >{{offer.Account}}</td>
+				<td class="highlight">{{ num(offer.TakerPays.value, 0) }}</td>
+				<td class="highlight">{{ num(offer.TakerGets/offer.TakerPays.value/1000000, 3) }}</td>
+				</template>
+				<template v-else>
+				<td v-bind:style="'color:' + stringToColour(offer.Account)" v-on:click="set_address(offer.Account)"> {{ offer.Account }}</td>
+				<td>{{ num(offer.TakerPays.value,0) }}</td>
+				<td>{{ num(offer.TakerGets/offer.TakerPays.value/1000000,3) }}</td>
+				</template>
+			</tr>
+			</table>
+		</div>
+		<div class="col-6">
+			<table style="border-collapse: collapse">
+			<tr><th>Price</th><th>Volume</th><th>Address</th></tr>
+			<center><h3>Asks</h3></center>
+			<tr v-for="offer in asks">
+				<template v-if="offer.isMine">
+				<td class="highlight">{{ num(offer.TakerPays/offer.TakerGets.value/1000000,3)  }}</td>
+				<td class="highlight">{{ num(offer.TakerGets.value,0) }}</td>
+				<td class="highlight" v-bind:style="'color:' + stringToColour(offer.Account)">{{offer.Account }}</td>
+				</template>
+				<template v-else>
+				<td>{{ num(offer.TakerPays/offer.TakerGets.value/1000000,3)  }}</td>
+				<td>{{ num(offer.TakerGets.value,0) }}</td>
+				<td v-bind:style="'color:' + stringToColour(offer.Account)" v-on:click="set_address(offer.Account)">{{offer.Account }}</td>
+				</template>
+			</tr>
+			</table>
+		</div>
+
+	</div>
+</div>
+<script>
+var ripl = new Vue({
+	el: "#ripl",
+	data: {
+		state: "Offline",
+		address: ADDRESS,
+		balance: {usd: 0, xrp: 0},
+		account: "",
+		offers_ready: "none",
+		bids: [{Account:'',TakerPays:0}],
+		asks: [{Account:'',TakerGets:{value:0},TakerPays:''}],
+		Remote: ripple.Remote,
+		ask_options: {
+        	currency_gets: "USD", issuer_gets: "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+        	currency_pays: "XRP", // trade_currency
+			// trade issuer
+		},
+		bid_options: {
+			currency_gets: "XRP", // trade_currency
+			currency_pays: "USD", issuer_pays: "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",  // bas_issuer
+		},
+	},
+	methods: {
+		stringToColour: function(str) {
+			var hash = 0;
+			for (var i = 0; i < str.length; i++) {
+				hash = str.charCodeAt(i) + ((hash << 5) - hash);
+			}
+			var colour = '#';
+			for (var i = 0; i < 3; i++) {
+				var value = (hash >> (i * 8)) & 0xFF;
+				colour += ('00' + value.toString(16)).substr(-2);
+			}
+			return colour;
+		},
+		num: function(str, decimals) {
+			var number = parseFloat(str).toFixed(decimals);
+			return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+		},
+		sum : function(n1, n2) {
+			return parseInt(n1) + parseInt(n2);
+		},
+		capitalize: function(str) {
+			return str.charAt(0).toUpperCase() + str.slice(1);
+		},
+		loadOrderBook : function(){
+			ripl.offers_ready = 'block';
+			this.bookBid = this.remote.createOrderBook({
+				currency_gets: "XRP", issuer_gets: null,
+				currency_pays: "USD", issuer_pays:"rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+				snapshot: true,
+			});
+			this.bookBid.on('model', function(offers) {
+				ripl.bids= ripl.bookBid = null;
+				ripl.bids = offers;
+				ripl.filter_offers();
+			});
+			this.bookAsk = this.remote.createOrderBook({
+				currency_gets: "USD", issuer_gets:"rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+				currency_pays: "XRP", 
+			});
+			this.bookAsk.on('model', function(offers) {
+				ripl.asks= this.bookAsks = null;
+				ripl.asks = offers;
+				ripl.filter_offers();
+			});
+		},
+		filter_offers : function(){
+			for (var i = 0; i < ripl.bids.length; i++){
+				if (ripl.bids[i].Account.indexOf(ripl.address) !== -1){
+					ripl.bids[i].isMine = true;
+				}
+				else {
+					ripl.bids[i].isMine = false;
+				}
+			}
+			for (var i = 0; i < ripl.asks.length; i++){
+				if (ripl.asks[i].Account.indexOf(ripl.address) !== -1){
+					ripl.asks[i].isMine = true;
+				}
+				else {
+					ripl.asks[i].isMine = false;
+				}
+			}
+		},
+		set_address : function(addr) {
+			ripl.address = addr;
+			ripl.getBalance();
+			ripl.filter_offers();
+		},
+		reload_all: function() {
+			ripl.loadOrderbook();
+			ripl.getBalance();
+
+		},
+		getBalance : function() {
+			if (this.remote) {
+				this.account = this.remote.account(this.address)
+				this.account.entry();
+				this.account.on('entry', function(entry, ledger){
+					ripl.balance.xrp = parseInt(ripl.account._entry.Balance);
+					ripl.remote.requestRippleBalance({
+						currency: "USD",
+						issuer: "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+						ledger: "validated",
+						account: ripl.address,
+						},
+						function(err, res) {
+							if (res && res.account_balance) {
+								ripl.balance.usd = res.account_balance._value
+							}
+						}
+					);
+				});
+			}
+		},
+	},
+	filters: {
+		rAddr : function(value) {
+			if (!value) return '';
+			return value.slice(0,15);
+		},
+	},
+	watch: {
+		'address': function(newv, oldv) {
+			window.location.hash = newv;
+			ripl.address = newv;
+			ripl.loadOrderBook();
+		},
+	},
+	mounted: function() {
+		this.$nextTick(function () {
+			console.log('Vue loaded.');
+//			this.loadOrderBook();
+
+			this.remote = new this.Remote({
+				trusted: false,
+				local_signing: true,
+				local_fee: true,
+				fee_cushion: 1.2,
+				max_fee: 120,
+				servers: [{
+					host: 's1.ripple.com',
+					port: 443,
+					secure: true,
+					primary: true,
+				}]
+			});
+			this.state = "Connecting.."
+			this.remote.connect(function (){
+			});
+			this.remote.on('state', function(state){
+				ripl.state = ripl.capitalize(state);
+			});
+
+			setTimeout(this.loadOrderBook, 2000);
+			setTimeout(this.getBalance, 2000);
+			
+		})
+	},
+});
+
+</script>
+</body>
+</html>
+
